@@ -1,33 +1,27 @@
 import express from 'express';
-import dotenv from 'dotenv';
+import mongoose from 'mongoose';
 import cors from 'cors';
-import connectDB from './config/db.js';
-import userRoutes from './routes/userRoutes.js';
+import dotenv from 'dotenv';
 import skillRoutes from './routes/skillRoutes.js';
+import userRoutes from './routes/userRoutes.js'; 
+import requestRoutes from './routes/requestRoutes.js';
 
-// Load environment variables
 dotenv.config();
-
-// Connect to MongoDB
-connectDB();
-
 const app = express();
 
-// Middleware (CORS must come before Routes)
 app.use(cors());
-app.use(express.json()); 
+app.use(express.json());
 
-// API Routes
-app.use('/api/users', userRoutes);
+// Routes
 app.use('/api/skills', skillRoutes);
+app.use('/api/auth', userRoutes); 
+app.use('/api/requests', requestRoutes);
 
-// Base Route
-app.get('/', (req, res) => {
-  res.send('AI-SkillSwap API is running smoothly...');
-});
+const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/skillswap";
 
-// Server Configuration
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server sprinting on port ${PORT}`);
-});
+mongoose.connect(MONGO_URI)
+  .then(() => console.log("🚀 SERVER IS ALIVE: MongoDB Connected"))
+  .catch(err => console.log("MongoDB Connection Error:", err));
+
+const PORT = 5000;
+app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));

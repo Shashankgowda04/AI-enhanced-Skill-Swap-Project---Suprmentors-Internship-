@@ -1,46 +1,61 @@
-import User from '../models/userModel.js';
+import User from '../models/User.js';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
-// @desc Register a new user
+// @desc    Register a new user
 export const registerUser = async (req, res) => {
-    const { name, email, password } = req.body;
-
-    const userExists = await User.findOne({ email });
-    if (userExists) {
-        return res.status(400).json({ message: 'User already exists' });
+  const { name, email, password } = req.body;
+  try {
+    let user = await User.findOne({ email });
+    if (user) {
+      return res.status(400).json({ msg: 'User already exists' });
     }
+
+    user = new User({ name, email, password });
 
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    user.password = await bcrypt.hash(password, salt);
 
-    const user = await User.create({
-        name,
-        email,
-        password: hashedPassword,
-    });
+    await user.save();
 
-    if (user) {
-        res.status(201).json({ _id: user.id, name: user.name, email: user.email });
-    } else {
-        res.status(400).json({ message: 'Invalid user data' });
-    }
+    const payload = { user: { id: user._id, name: user.name } };
+    const token = jwt.sign(payload, "secret", { expiresIn: '1h' });
+
+    res.json({ token, user: { id: user._id, name: user.name } });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error');
+  }
 };
 
-// @desc Auth user & get login info
+// @desc    Authenticate user & get token (Login)
 export const authUser = async (req, res) => {
-    const { email, password } = req.body;
-
-    const user = await User.findOne({ email });
-
-    // Compare entered password with hashed password in DB
-    if (user && (await bcrypt.compare(password, user.password))) {
-        res.json({
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            message: "Login Successful!"
-        });
-    } else {
-        res.status(401).json({ message: 'Invalid email or password' });
+  const { email, password } = req.body;
+  
+  try {
+    // 🛡️ TEST BACKDOOR: Use these to login if DB is giving trouble
+    if (email === "bob@test.com" && password === "123456") {
+      const token = jwt.sign({ user: { id: "123", name: "Developer BOB" } }, "secret", { expiresIn: '1h' });
+      return res.json({ token, user: { id: "123", name: "Developer BOB" } });
     }
+
+    // Standard Login Logic
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ msg: 'Invalid Credentials' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ msg: 'Invalid Credentials' });
+    }
+
+    const payload = { user: { id: user._id, name: user.name } };
+    const token = jwt.sign(payload, "secret", { expiresIn: '1h' });
+
+    res.json({ token, user: { id: user._id, name: user.name } });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error');
+  }
 };
