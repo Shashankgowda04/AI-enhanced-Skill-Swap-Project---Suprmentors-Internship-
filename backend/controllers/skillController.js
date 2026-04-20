@@ -1,59 +1,89 @@
 import Skill from '../models/skillModel.js';
 
 // @desc Create a new skill post
-// POST /api/skills
 export const createSkill = async (req, res) => {
+    // 🟢 DEBUG LOG: Check this in your VS Code terminal!
+    console.log("--- New Skill Post Attempt ---");
+    console.log("Data Received:", req.body);
+
     const { user, title, description, category, type } = req.body;
 
+    // Validation
     if (!user || !title || !category || !type) {
         return res.status(400).json({ message: 'Please fill all required fields' });
     }
 
-    const skill = await Skill.create({
-        user,
-        title,
-        description,
-        category,
-        type // 'Offer' or 'Request'
-    });
-
-    if (skill) {
+    try {
+        const skill = await Skill.create({
+            user,
+            title,
+            description,
+            category, 
+            type 
+        });
+        
+        console.log("✅ Skill Saved Successfully:", skill.category);
         res.status(201).json(skill);
-    } else {
-        res.status(400).json({ message: 'Invalid skill data' });
+    } catch (error) {
+        console.error("❌ Mongoose Error:", error.message);
+        res.status(400).json({ 
+            message: 'Invalid skill data', 
+            error: error.message 
+        });
     }
 };
 
 // @desc Get all skills (The Marketplace Feed)
-// GET /api/skills
 export const getSkills = async (req, res) => {
-    const skills = await Skill.find({}).populate('user', 'name email'); 
-    // .populate brings in the User's name/email instead of just their ID
-    res.json(skills);
+    try {
+        const skills = await Skill.find().sort({ createdAt: -1 });
+        res.json(skills);
+    } catch (err) {
+        res.status(500).json({ message: 'Server Error' });
+    }
 };
-// @desc Delete a skill post
-// DELETE /api/skills/:id
-export const deleteSkill = async (req, res) => {
-    const skill = await Skill.findById(req.params.id);
 
-    if (skill) {
-        await skill.deleteOne();
-        res.json({ message: 'Skill removed successfully' });
-    } else {
-        res.status(404).json({ message: 'Skill not found' });
+// @desc GET skills for a specific user (Swap-Back Logic)
+export const getUserSkills = async (req, res) => {
+    try {
+        const skills = await Skill.find({ 
+            user: req.params.username, 
+            type: 'Offer' 
+        });
+        res.json(skills);
+    } catch (err) {
+        res.status(500).json({ message: 'Server Error' });
+    }
+};
+
+// @desc Delete a skill post
+export const deleteSkill = async (req, res) => {
+    try {
+        const skill = await Skill.findById(req.params.id);
+
+        if (skill) {
+            await skill.deleteOne();
+            res.json({ message: 'Skill removed successfully' });
+        } else {
+            res.status(404).json({ message: 'Skill not found' });
+        }
+    } catch (err) {
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
 // @desc Search for skills by title or category
-// GET /api/skills/search/:keyword
 export const searchSkills = async (req, res) => {
     const keyword = req.params.keyword;
-    const skills = await Skill.find({
-        $or: [
-            { title: { $regex: keyword, $options: 'i' } }, // 'i' means case-insensitive
-            { category: { $regex: keyword, $options: 'i' } }
-        ]
-    }).populate('user', 'name');
-
-    res.json(skills);
+    try {
+        const skills = await Skill.find({
+            $or: [
+                { title: { $regex: keyword, $options: 'i' } },
+                { category: { $regex: keyword, $options: 'i' } }
+            ]
+        });
+        res.json(skills);
+    } catch (err) {
+        res.status(500).json({ message: 'Server Error' });
+    }
 };
