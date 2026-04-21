@@ -1,11 +1,14 @@
 import Request from '../models/Request.js';
 
-// 1. Get Incoming Requests (For the Banner)
+// 1. Get Incoming Requests (Pending)
 export const getPendingRequests = async (req, res) => {
   try {
-    const requests = await Request.find({ receiver: req.user.id, status: 'pending' })
-      .populate('sender', 'name')
-      .populate('skillId', 'title');
+    // We search by the name string to match your current DB entries
+    const userName = req.user.name;
+    const requests = await Request.find({ 
+      receiver: { $regex: new RegExp(`^${userName}$`, 'i') }, 
+      status: 'pending' 
+    });
     res.status(200).json(requests);
   } catch (error) {
     res.status(500).json({ message: "Error fetching requests", error });
@@ -16,29 +19,34 @@ export const getPendingRequests = async (req, res) => {
 export const updateRequestStatus = async (req, res) => {
   try {
     const { status, selectedSkillId } = req.body;
-    const request = await Request.findByIdAndUpdate(
-      req.params.id,
-      { status, selectedSkillId },
-      { new: true }
-    );
+    
+    // Using FindById and then manually saving to ensure all logic triggers
+    const request = await Request.findById(req.params.id);
+    if (!request) return res.status(404).json({ message: "Request not found" });
+
+    request.status = status;
+    if (status === 'accepted' && selectedSkillId) {
+      request.selectedSkillTitle = selectedSkillId;
+    }
+
+    await request.save();
     res.status(200).json({ message: `Request ${status}`, request });
   } catch (error) {
     res.status(500).json({ message: "Update failed", error });
   }
 };
 
-// 3. Get Trade History (The Final 5%)
+// 3. Get Trade History
 export const getTradeHistory = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userName = req.user.name;
     const history = await Request.find({
-      $or: [{ sender: userId }, { receiver: userId }],
+      $or: [
+        { sender: { $regex: new RegExp(`^${userName}$`, 'i') } }, 
+        { receiver: { $regex: new RegExp(`^${userName}$`, 'i') } }
+      ],
       status: 'accepted'
-    })
-    .populate('sender', 'name email')
-    .populate('receiver', 'name email')
-    .populate('skillId', 'title category')
-    .populate('selectedSkillId', 'title category');
+    }).sort({ updatedAt: -1 });
 
     res.status(200).json(history);
   } catch (error) {

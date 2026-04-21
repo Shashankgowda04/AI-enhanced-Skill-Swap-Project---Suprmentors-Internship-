@@ -4,12 +4,13 @@ import Skill from '../models/skillModel.js';
 export const createSkill = async (req, res) => {
     // 🟢 DEBUG LOG: Check this in your VS Code terminal!
     console.log("--- New Skill Post Attempt ---");
-    console.log("Data Received:", req.body);
+    console.log("Body Data:", req.body);
+    console.log("File Data:", req.file);
 
-    const { user, title, description, category, type } = req.body;
+    const { user, title, description, category, syllabusText, duration } = req.body;
 
-    // Validation
-    if (!user || !title || !category || !type) {
+    // Validation - Removed 'type' from strict requirement as we default it to 'Offer'
+    if (!user || !title || !category) {
         return res.status(400).json({ message: 'Please fill all required fields' });
     }
 
@@ -18,11 +19,15 @@ export const createSkill = async (req, res) => {
             user,
             title,
             description,
-            category, 
-            type 
+            category,
+            // 🟢 SAVING NEW TEACHER-REQUIRED FIELDS
+            syllabusText: syllabusText || "", 
+            duration: duration || "",
+            syllabusFile: req.file ? req.file.path : null, // Stores path to uploads folder
+            type: req.body.type || 'Offer' // Default to Offer if not provided
         });
         
-        console.log("✅ Skill Saved Successfully:", skill.category);
+        console.log("✅ Skill Saved Successfully:", skill.title);
         res.status(201).json(skill);
     } catch (error) {
         console.error("❌ Mongoose Error:", error.message);

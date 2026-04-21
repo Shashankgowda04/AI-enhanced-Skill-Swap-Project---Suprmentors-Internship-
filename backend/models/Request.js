@@ -4,11 +4,11 @@ const requestSchema = new mongoose.Schema({
   sender: { type: String, required: true },
   receiver: { type: String, required: true },
   skillTitle: { type: String, required: true },
+  // 🟢 NEW FIELD: Stores the skill the sender is offering
+  senderSkill: { type: String, default: "" }, 
   status: { type: String, default: 'pending' },
-  // 🟢 ADD THIS FIELD:
   selectedSkillTitle: { type: String, default: "" } 
 }, { 
-  // 🟢 ADD THIS: Automatically creates createdAt and updatedAt fields
   timestamps: true 
 });
 
