@@ -7,12 +7,13 @@ const router = express.Router();
 // --- 1. POST A NEW REQUEST ---
 router.post('/', auth, async (req, res) => {
   try {
-    const { receiver, skillTitle, receiverId } = req.body;
+    const { receiver, skillTitle, receiverId, senderSkill } = req.body;
     const newRequest = new Request({
       sender: req.user.name, 
       receiver: receiver,
-      receiverId: receiverId, // Storing the ID for better lookups
+      receiverId: receiverId, 
       skillTitle: skillTitle,
+      senderSkill: senderSkill, // Ensuring the offered skill is saved
       status: 'pending'
     });
     await newRequest.save();
@@ -23,23 +24,26 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-// --- 2. GET PENDING REQUESTS (MATCHED TO FRONTEND) ---
-// Changed from '/my-requests' to '/' to match your axios.get call in TradeHistory.jsx
+// --- 2. GET ALL RELEVANT REQUESTS (PENDING & ACCEPTED) ---
+// Updated to support the new "Learning Library" by fetching both roles and statuses
 router.get('/', auth, async (req, res) => {
   try {
     const userName = req.user.name;
-    const myRequests = await Request.find({ 
-      receiver: { $regex: new RegExp(`^${userName}$`, 'i') },
-      status: 'pending' 
-    });
-    res.json(myRequests);
+    const requests = await Request.find({ 
+      $or: [
+        { receiver: { $regex: new RegExp(`^${userName}$`, 'i') } },
+        { sender: { $regex: new RegExp(`^${userName}$`, 'i') } }
+      ]
+    }).sort({ updatedAt: -1 });
+
+    res.json(requests);
   } catch (err) {
     console.error(err);
     res.status(500).send('Server Error');
   }
 });
 
-// --- 3. GET TRADE HISTORY ---
+// --- 3. GET TRADE HISTORY (DEDICATED HISTORY LOG) ---
 router.get('/history', auth, async (req, res) => {
   try {
     const userName = req.user.name;
@@ -66,16 +70,16 @@ router.put('/:id', auth, async (req, res) => {
 
     if (!request) return res.status(404).json({ msg: 'Request not found' });
 
-    // Authorization check
+    // Authorization check: Only the receiver can accept/reject
     if (request.receiver.toLowerCase() !== req.user.name.toLowerCase()) {
       return res.status(401).json({ msg: 'Not authorized' });
     }
 
     request.status = status;
     
-    // Save the skill being traded back if accepted
+    // If a specific counter-offer skill was chosen during acceptance
     if (status === 'accepted' && selectedSkillId) {
-      request.selectedSkillTitle = selectedSkillId; 
+      request.senderSkill = selectedSkillId; 
     }
 
     await request.save();

@@ -2,11 +2,12 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import path from 'path'; // NEW: Required for handling file paths
-import { fileURLToPath } from 'url'; // NEW: Required for ES Modules pathing
+import path from 'path'; 
+import { fileURLToPath } from 'url'; 
 import skillRoutes from './routes/skillRoutes.js';
 import userRoutes from './routes/userRoutes.js'; 
 import requestRoutes from './routes/requestRoutes.js';
+import aiRoutes from './routes/aiRoutes.js'; // NEW: Import the AI routes
 
 dotenv.config();
 const app = express();
@@ -25,6 +26,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/skills', skillRoutes);
 app.use('/api/auth', userRoutes); 
 app.use('/api/requests', requestRoutes);
+app.use('/api/ai', aiRoutes); // NEW: Register the AI routes
 
 const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/skillswap";
 
