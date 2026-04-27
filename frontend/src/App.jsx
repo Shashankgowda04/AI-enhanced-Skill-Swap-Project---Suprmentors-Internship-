@@ -2,9 +2,9 @@ import React, { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Search, X, Trash2, GraduationCap, Bell, 
+  Search, X, Trash2, GraduationCap, 
   Upload, Clock, CheckCircle, Layers, Star, LogOut, BookOpen,
-  ArrowRightLeft
+  Sparkles, Wand2
 } from 'lucide-react';
 import Auth from './components/Auth'; 
 import TradeHistory from './components/TradeHistory'; 
@@ -22,6 +22,11 @@ function App() {
 
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
   const [pendingTargetSkill, setPendingTargetSkill] = useState(null);
+
+  // AI State
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiRoadmap, setAiRoadmap] = useState(null);
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
   const [formData, setFormData] = useState({ 
     title: "", description: "", syllabusText: "", duration: "", category: "Programming"
@@ -74,7 +79,7 @@ function App() {
         const config = { headers: { 'x-auth-token': token } };
         const [skillsRes, reqsRes] = await Promise.all([
           axios.get('http://localhost:5000/api/skills'),
-          axios.get('http://localhost:5000/api/requests/history', config) // Fetch history to see accepted swaps
+          axios.get('http://localhost:5000/api/requests/history', config)
         ]);
         setSkills(skillsRes.data || []);
         setRequests(reqsRes.data || []);
@@ -88,7 +93,6 @@ function App() {
     fetchData();
   }, [user, refreshHistory, handleLogout]);
 
-  // CRITICAL UPDATE: Both parties now unlock their respective skills
   useEffect(() => {
     if (skills.length > 0 && requests.length > 0 && user) {
       const acceptedSwaps = requests.filter(req => req.status === 'accepted');
@@ -97,8 +101,8 @@ function App() {
         const isSender = req.sender?.toLowerCase() === user.name?.toLowerCase();
         const isReceiver = req.receiver?.toLowerCase() === user.name?.toLowerCase();
 
-        if (isSender) return req.skillTitle; // Sender gets the receiver's skill
-        if (isReceiver) return req.senderSkill; // Receiver gets the sender's skill
+        if (isSender) return req.skillTitle;
+        if (isReceiver) return req.senderSkill;
         return null;
       }).filter(Boolean);
 
@@ -106,6 +110,23 @@ function App() {
       setUnlockedCourses(myUnlocked);
     }
   }, [skills, requests, user]);
+
+  const handleGenerateRoadmap = async (course) => {
+    setAiLoading(true);
+    setIsAiModalOpen(true);
+    try {
+      const response = await axios.post('http://localhost:5000/api/ai/generate-roadmap', {
+        title: course.title,
+        syllabusText: course.syllabusText || course.description
+      });
+      setAiRoadmap(response.data.roadmap);
+    } catch (error) {
+      console.error("AI Generation Error:", error);
+      setAiRoadmap("Error generating roadmap. Please check your API key and connection.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const handleSwapRequest = async (targetSkill, selectedMySkillTitle = null) => {
     if (targetSkill.user === user.name) return alert("You cannot swap with yourself!");
@@ -168,6 +189,20 @@ function App() {
     } catch (error) { alert("Error posting course"); }
   };
 
+  // Helper to format AI response text (New: Makes AI output look cleaner)
+  const formatAiText = (text) => {
+    if (!text) return "";
+    return text.split('\n').map((line, i) => {
+      if (line.startsWith('**')) {
+        return <h4 key={i} className="font-black text-blue-800 mt-4 mb-2 uppercase">{line.replace(/\*\*/g, '')}</h4>;
+      }
+      if (line.startsWith('*')) {
+        return <p key={i} className="ml-4 mb-1 flex items-start gap-2"><CheckCircle size={14} className="mt-1 text-blue-500 flex-shrink-0" /> {line.replace(/\*/g, '')}</p>;
+      }
+      return <p key={i} className="mb-2">{line}</p>;
+    });
+  };
+
   if (!user) return <div className="min-h-screen bg-[#020617] flex items-center justify-center"><Auth onLoginSuccess={setUser} /></div>;
 
   const filteredSkills = skills.filter(s => 
@@ -223,9 +258,17 @@ function App() {
                     </div>
                     <p className="text-slate-600 text-sm mb-4 line-clamp-2">{course.description}</p>
                   </div>
-                  <button className="w-full py-3 bg-black text-white rounded-xl font-black text-xs uppercase italic flex items-center justify-center gap-2">
-                    <Layers size={14}/> Start Course
-                  </button>
+                  <div className="flex gap-2">
+                    <button className="flex-1 py-3 bg-black text-white rounded-xl font-black text-xs uppercase italic flex items-center justify-center gap-2">
+                      <Layers size={14}/> Start Course
+                    </button>
+                    <button 
+                      onClick={() => handleGenerateRoadmap(course)}
+                      className="px-4 py-3 bg-white border-2 border-blue-600 text-blue-600 rounded-xl font-black text-xs uppercase italic flex items-center justify-center gap-2 hover:bg-blue-600 hover:text-white transition-all"
+                    >
+                      <Sparkles size={14}/> AI Roadmap
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -273,6 +316,45 @@ function App() {
           </div>
         </section>
       </main>
+
+      {/* AI ROADMAP MODAL */}
+      <AnimatePresence>
+        {isAiModalOpen && (
+          <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white p-8 rounded-[2.5rem] max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col relative">
+              <button onClick={() => {setIsAiModalOpen(false); setAiRoadmap(null);}} className="absolute right-6 top-6 text-slate-400 hover:text-black z-10"><X size={28}/></button>
+              
+              <div className="flex items-center gap-3 mb-6">
+                <div className="bg-blue-600 p-2 rounded-xl text-white"><Sparkles size={24} /></div>
+                <h2 className="text-2xl font-black uppercase italic">AI Learning Roadmap</h2>
+              </div>
+
+              <div className="overflow-y-auto pr-4 custom-scrollbar flex-grow">
+                {aiLoading ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-4">
+                    <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
+                      <Wand2 size={48} className="text-blue-600" />
+                    </motion.div>
+                    <p className="font-black uppercase italic animate-pulse text-blue-600 text-center">Gemini is Crafting your<br/>personalized 4-week plan...</p>
+                  </div>
+                ) : (
+                  <div className="prose prose-slate max-w-none">
+                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 font-medium text-slate-700 leading-relaxed">
+                      {formatAiText(aiRoadmap)}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {!aiLoading && (
+                <button onClick={() => setIsAiModalOpen(false)} className="mt-6 w-full py-4 bg-black text-white font-black rounded-2xl uppercase italic hover:bg-blue-600 transition-all">
+                  Got it, Let's Study!
+                </button>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <section className="bg-slate-900 py-20 text-white">
         <div className="max-w-4xl mx-auto px-6">
