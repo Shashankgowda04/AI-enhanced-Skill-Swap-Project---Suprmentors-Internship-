@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 import skillRoutes from './routes/skillRoutes.js';
 import userRoutes from './routes/userRoutes.js'; 
 import requestRoutes from './routes/requestRoutes.js';
-import aiRoutes from './routes/aiRoutes.js'; // AI routes imported correctly
+import aiRoutes from './routes/aiRoutes.js';
 
 dotenv.config();
 const app = express();
@@ -20,16 +20,17 @@ const __dirname = path.dirname(__filename);
 app.use(cors());
 app.use(express.json());
 
-// 🟢 STATIC FOLDER: Serves uploaded PDFs for the "Syllabus" feature
+// 🟢 STATIC FOLDER: Serves uploaded images AND PDFs
+// This ensures http://localhost:5000/uploads/filename.jpg works
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // --- Routes Registration ---
 app.use('/api/skills', skillRoutes);
 app.use('/api/auth', userRoutes); 
 app.use('/api/requests', requestRoutes);
-app.use('/api/ai', aiRoutes); // Registering the AI brain
+app.use('/api/ai', aiRoutes);
 
-// --- Global Error Handling (NEW: Prevents crashes during AI/API failures) ---
+// --- Global Error Handling ---
 app.use((err, req, res, next) => {
   console.error("Server Error Log:", err.stack);
   res.status(500).json({ 
@@ -47,7 +48,7 @@ mongoose.connect(MONGO_URI)
   .catch(err => console.log("MongoDB Connection Error:", err));
 
 // Start Server
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`
   -----------------------------------------

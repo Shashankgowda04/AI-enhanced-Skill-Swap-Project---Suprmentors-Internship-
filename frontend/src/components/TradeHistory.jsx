@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { History, CheckCircle, Clock, Check, X, ArrowRightLeft } from 'lucide-react';
 
-const TradeHistory = ({ refreshTrigger }) => {
+const TradeHistory = ({ refreshTrigger, onUpdate }) => {
   const [requests, setRequests] = useState([]); 
   const [history, setHistory] = useState([]);   
   const [loading, setLoading] = useState(true);
@@ -45,6 +45,15 @@ const TradeHistory = ({ refreshTrigger }) => {
       setRequests(prev => prev.filter(r => r._id !== request._id));
       
       alert(`Proposal ${status}!`);
+
+      // 🟢 CRITICAL SYNC FIX: Notify App.jsx to refresh the Global Library/Skills
+      if (onUpdate) {
+        onUpdate(); 
+      } else if (refreshTrigger && typeof refreshTrigger === 'function') {
+        // Fallback in case your parent passes the trigger function directly
+        refreshTrigger();
+      }
+
       fetchData(); 
     } catch (err) {
       console.error("Action error:", err);
@@ -113,7 +122,6 @@ const TradeHistory = ({ refreshTrigger }) => {
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
-                         {/* Clear visual of what was swapped for what */}
                         <div className="flex flex-col">
                            <span className="text-[10px] font-black text-blue-600 uppercase italic">You received</span>
                            <span className="text-slate-900 font-bold text-sm italic">{isUserSender ? swap.skillTitle : swap.senderSkill}</span>

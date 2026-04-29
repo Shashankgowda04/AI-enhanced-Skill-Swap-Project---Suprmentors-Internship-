@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, X, Trash2, GraduationCap, 
   Upload, Clock, CheckCircle, Layers, Star, LogOut, BookOpen,
-  Sparkles, Wand2
+  Sparkles, Wand2, Image as ImageIcon
 } from 'lucide-react';
 import Auth from './components/Auth'; 
 import TradeHistory from './components/TradeHistory'; 
@@ -28,8 +28,9 @@ function App() {
   const [aiRoadmap, setAiRoadmap] = useState(null);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
+  // FormData including 'photo' for manual image insertion
   const [formData, setFormData] = useState({ 
-    title: "", description: "", syllabusText: "", duration: "", category: "Programming"
+    title: "", description: "", syllabusText: "", duration: "", category: "Programming", photo: ""
   });
   const [syllabusFile, setSyllabusFile] = useState(null);
 
@@ -55,15 +56,22 @@ function App() {
     return styles[category] || styles.Other;
   };
 
-  const getCourseImage = (title) => {
-    const t = title ? title.toLowerCase() : "";
-    if (t.includes('cook')) return "https://images.unsplash.com/photo-1556910103-1c02745aae4d?w=500";
-    if (t.includes('react') || t.includes('web')) return "https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=500";
-    if (t.includes('market')) return "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=500";
-    if (t.includes('java')) return "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=500";
-    if (t.includes('tally')) return "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=500";
-    if (t.includes('ai') || t.includes('machine')) return "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=500";
-    return `https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=500`;
+  /**
+   * REFINED IMAGE LOGIC:
+   * Prioritizes: 1. DB Manual Photo -> 2. Uploaded File -> 3. Hardcoded Fallbacks
+   */
+  const getCourseImage = (skill) => {
+    if (skill.photo && skill.photo.startsWith('http')) {
+      return skill.photo;
+    }
+    
+    if (skill.syllabusFile) {
+      const cleanPath = skill.syllabusFile.startsWith('uploads/') ? skill.syllabusFile : `uploads/${skill.syllabusFile}`;
+      return `http://localhost:5000/${cleanPath}`;
+    }
+    
+    const idSeed = skill._id || "default";
+    return `https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800&sig=${idSeed}`;
   };
 
   const getDynamicRating = (id) => {
@@ -71,36 +79,35 @@ function App() {
     return { rating: (4 + (seed % 10) / 10).toFixed(1), reviews: (seed * 9) + 30 };
   };
 
+  const fetchData = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!user || !token) return;
+    try {
+      const config = { headers: { 'x-auth-token': token } };
+      const [skillsRes, reqsRes] = await Promise.all([
+        axios.get('http://localhost:5000/api/skills'),
+        axios.get('http://localhost:5000/api/requests/history', config)
+      ]);
+      setSkills(skillsRes.data || []);
+      setRequests(reqsRes.data || []);
+    } catch (error) { 
+      console.error("Fetch error:", error);
+      if (error.response?.status === 401) handleLogout();
+    } finally {
+      setLoading(false);
+    }
+  }, [user, handleLogout]);
+
   useEffect(() => {
-    const fetchData = async () => {
-      const token = localStorage.getItem('token');
-      if (!user || !token) return;
-      try {
-        const config = { headers: { 'x-auth-token': token } };
-        const [skillsRes, reqsRes] = await Promise.all([
-          axios.get('http://localhost:5000/api/skills'),
-          axios.get('http://localhost:5000/api/requests/history', config)
-        ]);
-        setSkills(skillsRes.data || []);
-        setRequests(reqsRes.data || []);
-      } catch (error) { 
-        console.error("Fetch error:", error);
-        if (error.response?.status === 401) handleLogout();
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchData();
-  }, [user, refreshHistory, handleLogout]);
+  }, [fetchData, refreshHistory]);
 
   useEffect(() => {
     if (skills.length > 0 && requests.length > 0 && user) {
       const acceptedSwaps = requests.filter(req => req.status === 'accepted');
-      
       const accessibleTitles = acceptedSwaps.map(req => {
         const isSender = req.sender?.toLowerCase() === user.name?.toLowerCase();
         const isReceiver = req.receiver?.toLowerCase() === user.name?.toLowerCase();
-
         if (isSender) return req.skillTitle;
         if (isReceiver) return req.senderSkill;
         return null;
@@ -108,6 +115,8 @@ function App() {
 
       const myUnlocked = skills.filter(s => accessibleTitles.includes(s.title));
       setUnlockedCourses(myUnlocked);
+    } else if (requests.length === 0) {
+      setUnlockedCourses([]);
     }
   }, [skills, requests, user]);
 
@@ -121,8 +130,7 @@ function App() {
       });
       setAiRoadmap(response.data.roadmap);
     } catch (error) {
-      console.error("AI Generation Error:", error);
-      setAiRoadmap("Error generating roadmap. Please check your API key and connection.");
+      setAiRoadmap("Error generating roadmap. Please check your connection.");
     } finally {
       setAiLoading(false);
     }
@@ -130,21 +138,16 @@ function App() {
 
   const handleSwapRequest = async (targetSkill, selectedMySkillTitle = null) => {
     if (targetSkill.user === user.name) return alert("You cannot swap with yourself!");
-    
     try {
       const token = localStorage.getItem('token');
       const mySkills = skills.filter(s => s.user === user.name);
-
       if (mySkills.length === 0) return alert("Please post a skill first!");
-
       if (mySkills.length > 1 && !selectedMySkillTitle) {
         setPendingTargetSkill(targetSkill);
         setIsSkillModalOpen(true);
         return;
       }
-
       const skillToOffer = selectedMySkillTitle || mySkills[0].title;
-
       await axios.post('http://localhost:5000/api/requests', {
         receiver: targetSkill.user, 
         skillTitle: targetSkill.title,
@@ -155,9 +158,7 @@ function App() {
       alert(`Proposal sent to ${targetSkill.user}`);
       setIsSkillModalOpen(false); 
       setRefreshHistory(prev => prev + 1);
-    } catch (err) { 
-        alert("Error sending swap proposal"); 
-    }
+    } catch (err) { alert("Error sending swap proposal"); }
   };
 
   const handleDelete = async (id) => {
@@ -173,32 +174,38 @@ function App() {
     e.preventDefault();
     const token = localStorage.getItem('token');
     const data = new FormData();
+    
     Object.keys(formData).forEach(key => data.append(key, formData[key]));
+    
     data.append('user', user.name);
     data.append('userId', user._id || user.id); 
-    if (syllabusFile) data.append('syllabusFile', syllabusFile);
+    
+    if (syllabusFile) {
+        data.append('syllabusFile', syllabusFile);
+    }
 
     try {
-      const res = await axios.post('http://localhost:5000/api/skills', data, { 
+      await axios.post('http://localhost:5000/api/skills', data, { 
         headers: { 'x-auth-token': token, 'Content-Type': 'multipart/form-data' } 
       });
-      setSkills(prev => [res.data, ...prev]);
+      
+      setActiveCategory("All");
+      await fetchData(); 
+      
       setIsModalOpen(false);
-      setFormData({ title: "", description: "", syllabusText: "", duration: "", category: "Programming" });
+      setFormData({ title: "", description: "", syllabusText: "", duration: "", category: "Programming", photo: "" });
       setSyllabusFile(null);
-    } catch (error) { alert("Error posting course"); }
+    } catch (error) { 
+        console.error("Submit Error:", error.response?.data);
+        alert("Error posting course: " + (error.response?.data?.message || "Unknown error")); 
+    }
   };
 
-  // Helper to format AI response text (New: Makes AI output look cleaner)
   const formatAiText = (text) => {
     if (!text) return "";
     return text.split('\n').map((line, i) => {
-      if (line.startsWith('**')) {
-        return <h4 key={i} className="font-black text-blue-800 mt-4 mb-2 uppercase">{line.replace(/\*\*/g, '')}</h4>;
-      }
-      if (line.startsWith('*')) {
-        return <p key={i} className="ml-4 mb-1 flex items-start gap-2"><CheckCircle size={14} className="mt-1 text-blue-500 flex-shrink-0" /> {line.replace(/\*/g, '')}</p>;
-      }
+      if (line.startsWith('**')) return <h4 key={i} className="font-black text-blue-800 mt-4 mb-2 uppercase">{line.replace(/\*\*/g, '')}</h4>;
+      if (line.startsWith('*')) return <p key={i} className="ml-4 mb-1 flex items-start gap-2"><CheckCircle size={14} className="mt-1 text-blue-500 flex-shrink-0" /> {line.replace(/\*/g, '')}</p>;
       return <p key={i} className="mb-2">{line}</p>;
     });
   };
@@ -212,6 +219,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-white text-slate-900 font-sans">
+      {/* Navbar */}
       <nav className="bg-[#020617] text-white sticky top-0 z-50 h-20 border-b border-white/5 flex items-center">
         <div className="max-w-7xl mx-auto px-6 w-full flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -219,7 +227,7 @@ function App() {
             <span className="text-2xl font-black italic">EduSwap<span className="text-blue-400">AI</span></span>
           </div>
           <div className="flex items-center gap-6">
-            <button onClick={() => setIsModalOpen(true)} className="bg-white text-black px-6 py-2 rounded-full font-black text-xs uppercase italic">POST COURSE</button>
+            <button onClick={() => setIsModalOpen(true)} className="bg-white text-black px-6 py-2 rounded-full font-black text-xs uppercase italic hover:bg-blue-400 transition-colors">POST COURSE</button>
             <div className="flex items-center gap-3 border-l border-white/10 pl-4 text-right">
               <div className="flex flex-col">
                 <span className="text-[10px] font-black uppercase text-slate-400">{user.name}</span>
@@ -231,6 +239,7 @@ function App() {
         </div>
       </nav>
 
+      {/* Hero Header */}
       <header className="bg-[#020617] py-20 text-white">
         <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-10 items-center">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -245,18 +254,22 @@ function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-12">
+        {/* Unlocked Courses Section */}
         {unlockedCourses.length > 0 && (
           <section className="mb-16">
             <h2 className="text-2xl font-black mb-6 flex items-center gap-3 italic uppercase"><BookOpen className="text-blue-600"/> My Learning Library</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {unlockedCourses.map(course => (
                 <div key={`unlocked-${course._id}`} className="bg-blue-50 border-2 border-blue-200 p-6 rounded-3xl flex flex-col justify-between">
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <h3 className="font-black text-lg uppercase italic">{course.title}</h3>
-                      <span className="bg-blue-600 text-white text-[9px] font-black px-2 py-1 rounded-full uppercase">Unlocked</span>
+                  <div className="flex gap-4 mb-4">
+                    <img src={getCourseImage(course)} className="w-24 h-24 rounded-2xl object-cover border-2 border-white shadow-md" alt={course.title} />
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <h3 className="font-black text-lg uppercase italic">{course.title}</h3>
+                        <span className="bg-blue-600 text-white text-[9px] font-black px-2 py-1 rounded-full uppercase">Unlocked</span>
+                      </div>
+                      <p className="text-slate-600 text-sm line-clamp-2">{course.description}</p>
                     </div>
-                    <p className="text-slate-600 text-sm mb-4 line-clamp-2">{course.description}</p>
                   </div>
                   <div className="flex gap-2">
                     <button className="flex-1 py-3 bg-black text-white rounded-xl font-black text-xs uppercase italic flex items-center justify-center gap-2">
@@ -266,7 +279,7 @@ function App() {
                       onClick={() => handleGenerateRoadmap(course)}
                       className="px-4 py-3 bg-white border-2 border-blue-600 text-blue-600 rounded-xl font-black text-xs uppercase italic flex items-center justify-center gap-2 hover:bg-blue-600 hover:text-white transition-all"
                     >
-                      <Sparkles size={14}/> AI Roadmap
+                      <span className="flex items-center gap-2">{aiLoading ? "Generating..." : <><Sparkles size={14}/> AI Roadmap</>}</span>
                     </button>
                   </div>
                 </div>
@@ -275,6 +288,7 @@ function App() {
           </section>
         )}
 
+        {/* Explore Skills Section */}
         <section id="explore-skills">
           <h2 className="text-2xl font-black mb-6 italic uppercase">Explore Skills</h2>
           <div className="flex gap-3 mb-8 overflow-x-auto no-scrollbar py-2">
@@ -288,8 +302,8 @@ function App() {
                 const { rating } = getDynamicRating(skill._id);
                 return (
                   <motion.div layout key={skill._id} className={`${getCategoryStyles(skill.category)} rounded-3xl overflow-hidden border shadow-sm flex flex-col h-full`}>
-                    <div className="h-40 relative">
-                      <img src={getCourseImage(skill.title)} className="w-full h-full object-cover" alt={skill.title} />
+                    <div className="h-44 relative overflow-hidden">
+                      <img src={getCourseImage(skill)} className="w-full h-full object-cover transform hover:scale-110 transition-transform duration-500" alt={skill.title} />
                       {skill.user === user.name && (
                         <button onClick={() => handleDelete(skill._id)} className="absolute top-3 right-3 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"><Trash2 size={14} /></button>
                       )}
@@ -317,25 +331,23 @@ function App() {
         </section>
       </main>
 
-      {/* AI ROADMAP MODAL */}
+      {/* AI Roadmap Modal */}
       <AnimatePresence>
         {isAiModalOpen && (
           <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white p-8 rounded-[2.5rem] max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col relative">
               <button onClick={() => {setIsAiModalOpen(false); setAiRoadmap(null);}} className="absolute right-6 top-6 text-slate-400 hover:text-black z-10"><X size={28}/></button>
-              
               <div className="flex items-center gap-3 mb-6">
                 <div className="bg-blue-600 p-2 rounded-xl text-white"><Sparkles size={24} /></div>
                 <h2 className="text-2xl font-black uppercase italic">AI Learning Roadmap</h2>
               </div>
-
               <div className="overflow-y-auto pr-4 custom-scrollbar flex-grow">
                 {aiLoading ? (
                   <div className="flex flex-col items-center justify-center py-20 gap-4">
                     <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
                       <Wand2 size={48} className="text-blue-600" />
                     </motion.div>
-                    <p className="font-black uppercase italic animate-pulse text-blue-600 text-center">Gemini is Crafting your<br/>personalized 4-week plan...</p>
+                    <p className="font-black uppercase italic animate-pulse text-blue-600 text-center">Gemini is Crafting your plan...</p>
                   </div>
                 ) : (
                   <div className="prose prose-slate max-w-none">
@@ -345,82 +357,122 @@ function App() {
                   </div>
                 )}
               </div>
-              
               {!aiLoading && (
-                <button onClick={() => setIsAiModalOpen(false)} className="mt-6 w-full py-4 bg-black text-white font-black rounded-2xl uppercase italic hover:bg-blue-600 transition-all">
-                  Got it, Let's Study!
-                </button>
+                <button onClick={() => setIsAiModalOpen(false)} className="mt-6 w-full py-4 bg-black text-white font-black rounded-2xl uppercase italic hover:bg-blue-600 transition-all">Got it!</button>
               )}
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
+      {/* Trade History Section */}
       <section className="bg-slate-900 py-20 text-white">
         <div className="max-w-4xl mx-auto px-6">
           <h2 className="text-3xl font-black text-center mb-12 italic uppercase">Activity Hub</h2>
           <div className="bg-slate-800 p-8 rounded-[2.5rem] border border-white/5">
-            <TradeHistory key={refreshHistory} refreshTrigger={refreshHistory} onUpdate={() => setRefreshHistory(prev => prev + 1)} />
+            {/* Added onUpdate prop here to trigger global data refresh */}
+            <TradeHistory 
+              refreshTrigger={refreshHistory} 
+              onUpdate={() => setRefreshHistory(prev => prev + 1)} 
+            />
           </div>
         </div>
       </section>
 
+      {/* Swap Skill Selection Modal */}
       <AnimatePresence>
         {isSkillModalOpen && (
           <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[110] flex items-center justify-center p-4">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white p-8 rounded-3xl max-w-sm w-full text-center">
-              <h2 className="text-xl font-black mb-2 uppercase italic text-slate-900">Choose your skill</h2>
-              <p className="text-xs text-slate-500 mb-6 font-bold uppercase tracking-tight">Which skill do you want to offer to {pendingTargetSkill?.user}?</p>
+              <h2 className="text-xl font-black mb-2 uppercase italic">Choose your skill</h2>
               <div className="space-y-3">
                 {skills.filter(s => s.user === user.name).map(mySkill => (
                   <button 
                     key={mySkill._id}
                     onClick={() => handleSwapRequest(pendingTargetSkill, mySkill.title)}
-                    className="w-full py-4 bg-slate-100 hover:bg-blue-600 hover:text-white transition-all rounded-2xl font-black text-xs uppercase italic text-slate-900"
+                    className="w-full py-4 bg-slate-100 hover:bg-blue-600 hover:text-white rounded-2xl font-black text-xs uppercase italic"
                   >
                     {mySkill.title}
                   </button>
                 ))}
-                <button onClick={() => setIsSkillModalOpen(false)} className="w-full py-2 text-slate-400 font-bold text-[10px] uppercase mt-2">Cancel</button>
+                <button onClick={() => setIsSkillModalOpen(false)} className="w-full py-2 text-slate-400 font-bold text-[10px] uppercase">Cancel</button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
+      {/* Publish Course Modal */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white p-8 rounded-3xl max-w-lg w-full relative">
               <button onClick={() => setIsModalOpen(false)} className="absolute right-6 top-6 text-slate-400 hover:text-black"><X size={24}/></button>
               <h2 className="text-2xl font-black mb-6 uppercase italic">Publish Course</h2>
-              <form onSubmit={handleSubmit} className="space-y-4 max-h-[75vh] overflow-y-auto pr-2 custom-scrollbar">
-                <input placeholder="TITLE" required className="w-full p-4 bg-slate-100 rounded-xl font-bold text-sm" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} />
-                <select className="w-full p-4 bg-slate-100 rounded-xl font-bold text-sm" value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})}>
+              <form onSubmit={handleSubmit} className="space-y-4 max-h-[75vh] overflow-y-auto pr-2">
+                <input 
+                  id="skill-title"
+                  name="title"
+                  placeholder="TITLE" 
+                  required 
+                  className="w-full p-4 bg-slate-100 rounded-xl font-bold text-sm" 
+                  value={formData.title} 
+                  onChange={(e) => setFormData({...formData, title: e.target.value})} 
+                />
+                
+                <div className="relative">
+                  <ImageIcon size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    id="skill-photo"
+                    name="photo"
+                    placeholder="IMAGE URL (Paste Unsplash or direct link)" 
+                    className="w-full p-4 pl-12 bg-slate-100 rounded-xl font-bold text-sm border-2 border-blue-100 focus:border-blue-500 outline-none transition-all" 
+                    value={formData.photo} 
+                    onChange={(e) => setFormData({...formData, photo: e.target.value})} 
+                  />
+                </div>
+
+                <select 
+                  id="skill-category"
+                  name="category"
+                  className="w-full p-4 bg-slate-100 rounded-xl font-bold text-sm" 
+                  value={formData.category} 
+                  onChange={(e) => setFormData({...formData, category: e.target.value})}
+                >
                   {categories.filter(c => c !== "All").map(cat => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
-                <textarea placeholder="DESCRIPTION" className="w-full p-4 bg-slate-100 rounded-xl text-sm" rows="2" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} />
-                <input placeholder="DURATION" className="w-full p-4 bg-slate-100 rounded-xl font-bold text-sm" value={formData.duration} onChange={(e) => setFormData({...formData, duration: e.target.value})} />
-                
                 <textarea 
-                  placeholder="COURSE SYLLABUS (Detailed Modules)" 
+                  id="skill-desc"
+                  name="description"
+                  placeholder="DESCRIPTION" 
+                  className="w-full p-4 bg-slate-100 rounded-xl text-sm" 
+                  rows="2" 
+                  value={formData.description} 
+                  onChange={(e) => setFormData({...formData, description: e.target.value})} 
+                />
+                <input 
+                  id="skill-duration"
+                  name="duration"
+                  placeholder="DURATION" 
+                  className="w-full p-4 bg-slate-100 rounded-xl font-bold text-sm" 
+                  value={formData.duration} 
+                  onChange={(e) => setFormData({...formData, duration: e.target.value})} 
+                />
+                <textarea 
+                  id="skill-syllabus"
+                  name="syllabusText"
+                  placeholder="SYLLABUS (Detailed Modules)" 
                   className="w-full p-4 bg-slate-100 rounded-xl text-sm border-2 border-dashed border-slate-200" 
                   rows="4" 
                   value={formData.syllabusText} 
                   onChange={(e) => setFormData({...formData, syllabusText: e.target.value})} 
                 />
-
-                <div className="relative">
-                  <label className="flex items-center gap-3 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl cursor-pointer hover:bg-blue-100 transition-colors">
-                    <Upload size={20} className="text-blue-600" />
-                    <span className="text-xs font-black uppercase text-blue-700">
-                      {syllabusFile ? syllabusFile.name : "Upload Syllabus PDF"}
-                    </span>
-                    <input type="file" accept=".pdf" className="hidden" onChange={(e) => setSyllabusFile(e.target.files[0])} />
-                  </label>
-                </div>
-
-                <button type="submit" className="w-full py-4 bg-blue-600 text-white font-black rounded-xl uppercase italic hover:bg-blue-700">Launch</button>
+                <label className="flex items-center gap-3 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl cursor-pointer">
+                  <Upload size={20} className="text-blue-600" />
+                  <span className="text-xs font-black uppercase text-blue-700">{syllabusFile ? syllabusFile.name : "Upload Syllabus PDF"}</span>
+                  <input type="file" accept=".pdf" className="hidden" onChange={(e) => setSyllabusFile(e.target.files[0])} />
+                </label>
+                <button type="submit" className="w-full py-4 bg-blue-600 text-white font-black rounded-xl uppercase italic">Launch</button>
               </form>
             </motion.div>
           </div>

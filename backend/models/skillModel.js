@@ -6,7 +6,7 @@ const skillSchema = new mongoose.Schema({
   type: { 
     type: String, 
     enum: ['Offer', 'Request'], 
-    default: 'Offer' // Defaulted to keep it working
+    default: 'Offer' 
   },
   category: { 
     type: String, 
@@ -15,12 +15,13 @@ const skillSchema = new mongoose.Schema({
   },
   user: { type: String, required: true },
   
-  // --- SYNCED WITH FRONTEND NAMES ---
-  syllabusText: { type: String, default: "" }, // Matches 'syllabusText' in App.jsx
-  duration: { type: String, default: "" },     // Matches 'duration' in App.jsx
-  syllabusFile: { type: String, default: null }, // Stores the path to the PDF
+  // ADDED THIS FIELD TO MATCH CONTROLLER
+  photo: { type: String, default: "" }, 
+
+  syllabusText: { type: String, default: "" }, 
+  duration: { type: String, default: "" },     
+  syllabusFile: { type: String, default: null }, 
   
-  // Kept for your internal use
   learningOutcomes: { type: String, default: "" },
   prerequisites: { type: String, default: "" }
 }, { timestamps: true });

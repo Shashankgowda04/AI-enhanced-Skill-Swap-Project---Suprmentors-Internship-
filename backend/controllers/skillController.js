@@ -1,31 +1,43 @@
 import Skill from '../models/skillModel.js';
 
-// @desc Create a new skill post
 export const createSkill = async (req, res) => {
-    console.log("--- Applying Final Visual Stability Fix ---");
-
-    const { user, title, description, category, syllabusText, duration } = req.body;
+    // Added 'photo' to the destructuring
+    const { user, title, description, category, syllabusText, duration, photo } = req.body;
 
     if (!user || !title || !category) {
         return res.status(400).json({ message: 'Please fill all required fields' });
     }
 
     try {
-        // 🛠️ THE FINAL FIX: 
-        // We use direct source URLs. No redirects, no API calls, no failures.
-        let dynamicPhoto;
-        const lowerTitle = title.toLowerCase();
-        const lowerCat = category.toLowerCase();
+        let finalPhoto;
 
-        if (lowerTitle.includes('karate') || lowerTitle.includes('martial')) {
-            dynamicPhoto = "https://images.unsplash.com/photo-1552072092-7f9b8d63efcb?q=80&w=600&auto=format&fit=crop";
-        } else if (lowerCat.includes('design') || lowerTitle.includes('ui')) {
-            dynamicPhoto = "https://images.unsplash.com/photo-1581291518062-c9242d507421?q=80&w=600&auto=format&fit=crop";
-        } else if (lowerCat.includes('programming') || lowerTitle.includes('code')) {
-            dynamicPhoto = "https://images.unsplash.com/photo-1498050108023-c5249f4df085?q=80&w=600&auto=format&fit=crop";
+        // OPTION 1 LOGIC: If you provided a manual URL, use it.
+        if (photo && photo.trim() !== "") {
+            finalPhoto = photo;
         } else {
-            // Default high-quality educational image
-            dynamicPhoto = "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?q=80&w=600&auto=format&fit=crop";
+            // FALLBACK: Your existing auto-mapping logic (keeps existing features working)
+            const lowerTitle = title.toLowerCase();
+            const lowerCat = category.toLowerCase();
+
+            if (lowerTitle.includes('karate') || lowerTitle.includes('martial') || lowerTitle.includes('mma')) {
+                finalPhoto = "https://images.unsplash.com/photo-1552072092-7f9b8d63efcb?q=80&w=800&auto=format&fit=crop";
+            } else if (lowerTitle.includes('guitar') || lowerTitle.includes('music') || lowerTitle.includes('piano') || lowerTitle.includes('singing')) {
+                finalPhoto = "https://images.unsplash.com/photo-1511379938547-c1f69419868d?q=80&w=800&auto=format&fit=crop";
+            } else if (lowerTitle.includes('java') || lowerTitle.includes('python') || lowerTitle.includes('javascript') || lowerCat.includes('programming') || lowerTitle.includes('code')) {
+                finalPhoto = "https://images.unsplash.com/photo-1498050108023-c5249f4df085?q=80&w=800&auto=format&fit=crop";
+            } else if (lowerTitle.includes('finance') || lowerTitle.includes('tally') || lowerTitle.includes('accounting') || lowerCat.includes('finance')) {
+                finalPhoto = "https://images.unsplash.com/photo-1611974714851-eb6053e62359?q=80&w=800&auto=format&fit=crop";
+            } else if (lowerCat.includes('design') || lowerTitle.includes('ui') || lowerTitle.includes('ux') || lowerTitle.includes('graphic')) {
+                finalPhoto = "https://images.unsplash.com/photo-1586717791821-3f44a563eb4c?q=80&w=800&auto=format&fit=crop";
+            } else if (lowerCat.includes('marketing') || lowerTitle.includes('seo') || lowerTitle.includes('ads')) {
+                finalPhoto = "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=800&auto=format&fit=crop";
+            } else if (lowerTitle.includes('football') || lowerTitle.includes('cricket') || lowerTitle.includes('sport')) {
+                finalPhoto = "https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=800&auto=format&fit=crop";
+            } else if (lowerTitle.includes('cook') || lowerTitle.includes('chef') || lowerTitle.includes('food')) {
+                finalPhoto = "https://images.unsplash.com/photo-1556910103-1c02745aae4d?q=80&w=800&auto=format&fit=crop";
+            } else {
+                finalPhoto = "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?q=80&w=800&auto=format&fit=crop";
+            }
         }
 
         const skill = await Skill.create({
@@ -37,20 +49,16 @@ export const createSkill = async (req, res) => {
             duration: duration || "",
             syllabusFile: req.file ? req.file.path : null,
             type: req.body.type || 'Offer',
-            photo: dynamicPhoto // 🟢 Guaranteed direct link
+            photo: finalPhoto // Saved to DB (Manual or Auto)
         });
         
-        console.log("✅ Skill Saved Successfully:", skill.title);
         res.status(201).json(skill);
     } catch (error) {
-        console.error("❌ Mongoose Error:", error.message);
         res.status(400).json({ message: 'Invalid skill data', error: error.message });
     }
 };
 
-// --- [REST OF THE FILE: getSkills, getUserSkills, deleteSkill, searchSkills] ---
-// --- NO CHANGES TO THE REST OF YOUR WORKING FUNCTIONS ---
-
+// Keep getSkills, getUserSkills, deleteSkill, and searchSkills exactly as they were
 export const getSkills = async (req, res) => {
     try {
         const skills = await Skill.find().sort({ createdAt: -1 });

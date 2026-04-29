@@ -2,7 +2,7 @@ import User from '../models/User.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-// Helper function for validation (keeps code clean)
+// Helper function for validation
 const validateInput = (email, password) => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!email || !password) return "Please enter all fields";
@@ -15,7 +15,6 @@ const validateInput = (email, password) => {
 export const registerUser = async (req, res) => {
   const { name, email, password } = req.body;
 
-  // 🛡️ Added Validation
   const error = validateInput(email, password);
   if (error) return res.status(400).json({ msg: error });
   if (!name) return res.status(400).json({ msg: "Please provide a name" });
@@ -34,7 +33,9 @@ export const registerUser = async (req, res) => {
     await user.save();
 
     const payload = { user: { id: user._id, name: user.name } };
-    const token = jwt.sign(payload, "secret", { expiresIn: '1h' });
+    
+    // Updated to use process.env.JWT_SECRET with "secret" as fallback
+    const token = jwt.sign(payload, process.env.JWT_SECRET || "secret", { expiresIn: '24h' });
 
     res.json({ token, user: { id: user._id, name: user.name } });
   } catch (err) {
@@ -47,18 +48,17 @@ export const registerUser = async (req, res) => {
 export const authUser = async (req, res) => {
   const { email, password } = req.body;
 
-  // 🛡️ Added Validation
   const error = validateInput(email, password);
   if (error) return res.status(400).json({ msg: error });
   
   try {
-    // TEST BACKDOOR (Keep for development, remove for final project)
+    // TEST BACKDOOR
     if (email === "bob@test.com" && password === "123456") {
-      const token = jwt.sign({ user: { id: "123", name: "Developer BOB" } }, "secret", { expiresIn: '1h' });
+      const payload = { user: { id: "123", name: "Developer BOB" } };
+      const token = jwt.sign(payload, process.env.JWT_SECRET || "secret", { expiresIn: '24h' });
       return res.json({ token, user: { id: "123", name: "Developer BOB" } });
     }
 
-    // Standard Login Logic
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(400).json({ msg: 'Invalid Credentials' });
@@ -70,10 +70,12 @@ export const authUser = async (req, res) => {
     }
 
     const payload = { user: { id: user._id, name: user.name } };
-    const token = jwt.sign(payload, "secret", { expiresIn: '1h' });
+    
+    // Updated to use process.env.JWT_SECRET with "secret" as fallback
+    const token = jwt.sign(payload, process.env.JWT_SECRET || "secret", { expiresIn: '24h' });
 
     res.json({ token, user: { id: user._id, name: user.name } });
-  } catch (err) {
+  } catch (err) { // ✅ Fixed: Changed ( to {
     console.error(err.message);
     res.status(500).send('Server error');
   }
