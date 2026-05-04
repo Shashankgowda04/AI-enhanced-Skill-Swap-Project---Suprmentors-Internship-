@@ -1,10 +1,12 @@
 import express from 'express';
-import { generateRoadmap } from '../controllers/aiController.js';
-// Assuming you have your auth middleware to protect this route
-// import { auth } from '../middleware/auth.js'; 
+import { generateRoadmap, enhanceDescription } from '../controllers/aiController.js';
 
 const router = express.Router();
 
+// Route for AI Roadmap Generation
 router.post('/generate-roadmap', generateRoadmap);
+
+// Route for the AI Magic Writer (Description Enhancement)
+router.post('/enhance-description', enhanceDescription);
 
 export default router;

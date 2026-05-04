@@ -1,10 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, X, Trash2, GraduationCap, 
   Upload, Clock, CheckCircle, Layers, Star, LogOut, BookOpen,
-  Sparkles, Wand2, Image as ImageIcon
+  Sparkles, Wand2, Image as ImageIcon, ExternalLink
 } from 'lucide-react';
 import Auth from './components/Auth'; 
 import TradeHistory from './components/TradeHistory'; 
@@ -28,11 +28,12 @@ function App() {
   const [aiRoadmap, setAiRoadmap] = useState(null);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
-  // FormData including 'photo' for manual image insertion
+  // Form State
   const [formData, setFormData] = useState({ 
     title: "", description: "", syllabusText: "", duration: "", category: "Programming", photo: ""
   });
   const [syllabusFile, setSyllabusFile] = useState(null);
+  const [pdfPreview, setPdfPreview] = useState(null); 
 
   const categories = ["All", "Programming", "Marketing", "Design", "Finance", "Business", "Other"];
 
@@ -56,22 +57,12 @@ function App() {
     return styles[category] || styles.Other;
   };
 
-  /**
-   * REFINED IMAGE LOGIC:
-   * Prioritizes: 1. DB Manual Photo -> 2. Uploaded File -> 3. Hardcoded Fallbacks
-   */
   const getCourseImage = (skill) => {
-    if (skill.photo && skill.photo.startsWith('http')) {
-      return skill.photo;
-    }
-    
+    if (skill.photo && skill.photo.startsWith('http')) return skill.photo;
     if (skill.syllabusFile) {
-      const cleanPath = skill.syllabusFile.startsWith('uploads/') ? skill.syllabusFile : `uploads/${skill.syllabusFile}`;
-      return `http://localhost:5000/${cleanPath}`;
+      return `http://localhost:5000/uploads/${skill.syllabusFile}`;
     }
-    
-    const idSeed = skill._id || "default";
-    return `https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800&sig=${idSeed}`;
+    return `https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800&sig=${skill._id || "default"}`;
   };
 
   const getDynamicRating = (id) => {
@@ -115,8 +106,6 @@ function App() {
 
       const myUnlocked = skills.filter(s => accessibleTitles.includes(s.title));
       setUnlockedCourses(myUnlocked);
-    } else if (requests.length === 0) {
-      setUnlockedCourses([]);
     }
   }, [skills, requests, user]);
 
@@ -130,7 +119,30 @@ function App() {
       });
       setAiRoadmap(response.data.roadmap);
     } catch (error) {
-      setAiRoadmap("Error generating roadmap. Please check your connection.");
+      setAiRoadmap("Error generating roadmap.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleEnhanceDescription = async () => {
+    if (!formData.description && !formData.title) {
+      return alert("Please enter a Title or a rough Description first!");
+    }
+
+    setAiLoading(true);
+    try {
+      const response = await axios.post('http://localhost:5000/api/ai/enhance-description', {
+        title: formData.title,
+        category: formData.category,
+        description: formData.description,
+        syllabusText: formData.syllabusText 
+      });
+      
+      setFormData({ ...formData, description: response.data.enhancedText });
+    } catch (error) {
+      console.error("AI Enhancement Error:", error);
+      alert("Failed to enhance description.");
     } finally {
       setAiLoading(false);
     }
@@ -158,7 +170,7 @@ function App() {
       alert(`Proposal sent to ${targetSkill.user}`);
       setIsSkillModalOpen(false); 
       setRefreshHistory(prev => prev + 1);
-    } catch (err) { alert("Error sending swap proposal"); }
+    } catch (err) { alert("Error sending proposal"); }
   };
 
   const handleDelete = async (id) => {
@@ -170,13 +182,33 @@ function App() {
     } catch (error) { console.error(error); }
   };
 
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file && file.type === "application/pdf") {
+      setSyllabusFile(file);
+      const url = URL.createObjectURL(file);
+      setPdfPreview(url);
+    } else {
+      alert("Please select a PDF file");
+    }
+  };
+
+  // NEW: Function to remove the selected PDF
+  const handleRemovePdf = (e) => {
+    e.stopPropagation(); // Prevent the label's click event (opening preview)
+    if (pdfPreview) {
+      URL.revokeObjectURL(pdfPreview); // Free memory
+    }
+    setSyllabusFile(null);
+    setPdfPreview(null);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('token');
     const data = new FormData();
     
     Object.keys(formData).forEach(key => data.append(key, formData[key]));
-    
     data.append('user', user.name);
     data.append('userId', user._id || user.id); 
     
@@ -186,18 +218,20 @@ function App() {
 
     try {
       await axios.post('http://localhost:5000/api/skills', data, { 
-        headers: { 'x-auth-token': token, 'Content-Type': 'multipart/form-data' } 
+        headers: { 
+            'x-auth-token': token, 
+            'Content-Type': 'multipart/form-data' 
+        } 
       });
-      
-      setActiveCategory("All");
-      await fetchData(); 
-      
       setIsModalOpen(false);
+      if (pdfPreview) URL.revokeObjectURL(pdfPreview);
       setFormData({ title: "", description: "", syllabusText: "", duration: "", category: "Programming", photo: "" });
       setSyllabusFile(null);
+      setPdfPreview(null);
+      fetchData();
     } catch (error) { 
-        console.error("Submit Error:", error.response?.data);
-        alert("Error posting course: " + (error.response?.data?.message || "Unknown error")); 
+        console.error(error);
+        alert("Error posting course"); 
     }
   };
 
@@ -219,19 +253,18 @@ function App() {
 
   return (
     <div className="min-h-screen bg-white text-slate-900 font-sans">
-      {/* Navbar */}
-      <nav className="bg-[#020617] text-white sticky top-0 z-50 h-20 border-b border-white/5 flex items-center">
-        <div className="max-w-7xl mx-auto px-6 w-full flex justify-between items-center">
+      <nav className="bg-[#020617] text-white sticky top-0 z-50 h-20 border-b border-white/5 flex items-center px-6">
+        <div className="max-w-7xl mx-auto w-full flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="bg-blue-600 p-2 rounded-xl"><GraduationCap size={28} /></div>
             <span className="text-2xl font-black italic">EduSwap<span className="text-blue-400">AI</span></span>
           </div>
           <div className="flex items-center gap-6">
-            <button onClick={() => setIsModalOpen(true)} className="bg-white text-black px-6 py-2 rounded-full font-black text-xs uppercase italic hover:bg-blue-400 transition-colors">POST COURSE</button>
-            <div className="flex items-center gap-3 border-l border-white/10 pl-4 text-right">
-              <div className="flex flex-col">
+            <button onClick={() => setIsModalOpen(true)} className="bg-white text-black px-6 py-2 rounded-full font-black text-xs uppercase italic hover:bg-blue-400 transition-all">POST COURSE</button>
+            <div className="flex items-center gap-3 border-l border-white/10 pl-4">
+              <div className="flex flex-col text-right">
                 <span className="text-[10px] font-black uppercase text-slate-400">{user.name}</span>
-                <button onClick={handleLogout} className="text-red-500 text-[9px] font-black uppercase flex items-center gap-1 hover:opacity-80"><LogOut size={10} /> Logout</button>
+                <button onClick={handleLogout} className="text-red-500 text-[9px] font-black uppercase flex items-center gap-1"><LogOut size={10} /> Logout</button>
               </div>
               <div className="h-10 w-10 bg-blue-600 rounded-full flex items-center justify-center font-black">{user.name?.charAt(0).toUpperCase()}</div>
             </div>
@@ -239,47 +272,46 @@ function App() {
         </div>
       </nav>
 
-      {/* Hero Header */}
-      <header className="bg-[#020617] py-20 text-white">
-        <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-10 items-center">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <header className="bg-[#020617] py-20 text-white px-6">
+        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-10 items-center">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
             <h1 className="text-6xl font-black mb-6 italic leading-tight">Your Knowledge <br/>Is <span className="text-blue-400">Pure Gold.</span></h1>
             <div className="relative max-w-lg">
               <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>
               <input className="w-full pl-14 pr-6 py-5 bg-white rounded-2xl text-slate-900 font-black shadow-xl" placeholder="Search for skills..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
           </motion.div>
-          <img src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800" className="rounded-3xl hidden lg:block border-8 border-white/5 shadow-2xl" alt="Hero" />
+          <img src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800" className="rounded-3xl hidden lg:block border-8 border-white/5 shadow-2xl" alt="Learning" />
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-12">
-        {/* Unlocked Courses Section */}
         {unlockedCourses.length > 0 && (
           <section className="mb-16">
             <h2 className="text-2xl font-black mb-6 flex items-center gap-3 italic uppercase"><BookOpen className="text-blue-600"/> My Learning Library</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {unlockedCourses.map(course => (
-                <div key={`unlocked-${course._id}`} className="bg-blue-50 border-2 border-blue-200 p-6 rounded-3xl flex flex-col justify-between">
+                <div key={course._id} className="bg-blue-50 border-2 border-blue-200 p-6 rounded-3xl flex flex-col justify-between">
                   <div className="flex gap-4 mb-4">
                     <img src={getCourseImage(course)} className="w-24 h-24 rounded-2xl object-cover border-2 border-white shadow-md" alt={course.title} />
                     <div>
-                      <div className="flex justify-between items-center mb-2">
-                        <h3 className="font-black text-lg uppercase italic">{course.title}</h3>
-                        <span className="bg-blue-600 text-white text-[9px] font-black px-2 py-1 rounded-full uppercase">Unlocked</span>
-                      </div>
+                      <h3 className="font-black text-lg uppercase italic mb-1">{course.title}</h3>
                       <p className="text-slate-600 text-sm line-clamp-2">{course.description}</p>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button className="flex-1 py-3 bg-black text-white rounded-xl font-black text-xs uppercase italic flex items-center justify-center gap-2">
-                      <Layers size={14}/> Start Course
-                    </button>
                     <button 
-                      onClick={() => handleGenerateRoadmap(course)}
-                      className="px-4 py-3 bg-white border-2 border-blue-600 text-blue-600 rounded-xl font-black text-xs uppercase italic flex items-center justify-center gap-2 hover:bg-blue-600 hover:text-white transition-all"
+                        className="flex-1 py-3 bg-black text-white rounded-xl font-black text-xs uppercase italic flex items-center justify-center gap-2"
+                        onClick={() => {
+                            if (course.syllabusFile) {
+                                window.open(`http://localhost:5000/uploads/${course.syllabusFile}`, '_blank');
+                            }
+                        }}
                     >
-                      <span className="flex items-center gap-2">{aiLoading ? "Generating..." : <><Sparkles size={14}/> AI Roadmap</>}</span>
+                        <Layers size={14}/> {course.syllabusFile ? "View Syllabus" : "Start Course"}
+                    </button>
+                    <button onClick={() => handleGenerateRoadmap(course)} className="px-4 py-3 bg-white border-2 border-blue-600 text-blue-600 rounded-xl font-black text-xs uppercase italic flex items-center justify-center gap-2 hover:bg-blue-600 hover:text-white transition-all">
+                      {aiLoading ? "..." : <><Sparkles size={14}/> Roadmap</>}
                     </button>
                   </div>
                 </div>
@@ -288,45 +320,37 @@ function App() {
           </section>
         )}
 
-        {/* Explore Skills Section */}
-        <section id="explore-skills">
+        <section>
           <h2 className="text-2xl font-black mb-6 italic uppercase">Explore Skills</h2>
           <div className="flex gap-3 mb-8 overflow-x-auto no-scrollbar py-2">
             {categories.map(cat => (
-              <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-6 py-2 rounded-full font-black text-[10px] uppercase tracking-widest whitespace-nowrap transition-all ${activeCategory === cat ? "bg-black text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{cat}</button>
+              <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-6 py-2 rounded-full font-black text-[10px] uppercase tracking-widest transition-all ${activeCategory === cat ? "bg-black text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{cat}</button>
             ))}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {filteredSkills.length > 0 ? (
-              filteredSkills.map((skill) => {
-                const { rating } = getDynamicRating(skill._id);
-                return (
-                  <motion.div layout key={skill._id} className={`${getCategoryStyles(skill.category)} rounded-3xl overflow-hidden border shadow-sm flex flex-col h-full`}>
-                    <div className="h-44 relative overflow-hidden">
-                      <img src={getCourseImage(skill)} className="w-full h-full object-cover transform hover:scale-110 transition-transform duration-500" alt={skill.title} />
-                      {skill.user === user.name && (
-                        <button onClick={() => handleDelete(skill._id)} className="absolute top-3 right-3 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"><Trash2 size={14} /></button>
+            {filteredSkills.map((skill) => {
+              const { rating } = getDynamicRating(skill._id);
+              return (
+                <motion.div layout key={skill._id} className={`${getCategoryStyles(skill.category)} rounded-3xl overflow-hidden border shadow-sm flex flex-col h-full`}>
+                  <div className="h-44 relative overflow-hidden">
+                    <img src={getCourseImage(skill)} className="w-full h-full object-cover transition-transform hover:scale-110" alt={skill.title} />
+                    {skill.user === user.name && (
+                      <button onClick={() => handleDelete(skill._id)} className="absolute top-3 right-3 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600"><Trash2 size={14} /></button>
+                    )}
+                  </div>
+                  <div className="p-5 flex flex-col flex-grow">
+                    <h3 className="font-black text-md mb-1 uppercase italic truncate">{skill.title}</h3>
+                    <p className="text-[10px] font-bold text-slate-500 mb-4 uppercase">By {skill.user}</p>
+                    <div className="mt-auto flex justify-between items-center pt-3 border-t border-black/5">
+                      <div className="flex items-center gap-1 font-black text-xs">{rating} <Star size={12} className="text-amber-500" fill="currentColor"/></div>
+                      {skill.user !== user.name && (
+                        <button onClick={() => handleSwapRequest(skill)} className="px-4 py-2 bg-black text-white rounded-xl font-black text-[10px] uppercase italic hover:bg-blue-600 transition-all">Swap</button>
                       )}
                     </div>
-                    <div className="p-5 flex flex-col flex-grow">
-                      <h3 className="font-black text-md mb-1 uppercase italic leading-tight truncate">{skill.title}</h3>
-                      <p className="text-[10px] font-bold text-slate-500 mb-4 uppercase">Instructor: {skill.user}</p>
-                      <div className="mt-auto flex justify-between items-center pt-3 border-t border-black/5">
-                        <div className="flex items-center gap-1 font-black text-xs">{rating} <Star size={12} className="text-amber-500" fill="currentColor"/></div>
-                        {skill.user !== user.name && (
-                          <button onClick={() => handleSwapRequest(skill)} className="px-4 py-2 bg-black text-white rounded-xl font-black text-[10px] uppercase italic hover:bg-blue-600 transition-colors">Swap</button>
-                        )}
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })
-            ) : (
-              <div className="col-span-full flex flex-col items-center justify-center py-20 text-slate-400 border-2 border-dashed border-slate-100 rounded-3xl">
-                <Layers size={48} className="mb-4 opacity-20" />
-                <p className="font-black uppercase italic">No courses found</p>
-              </div>
-            )}
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         </section>
       </main>
@@ -347,133 +371,111 @@ function App() {
                     <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
                       <Wand2 size={48} className="text-blue-600" />
                     </motion.div>
-                    <p className="font-black uppercase italic animate-pulse text-blue-600 text-center">Gemini is Crafting your plan...</p>
+                    <p className="font-black uppercase italic animate-pulse text-blue-600">Gemini is Crafting your plan...</p>
                   </div>
                 ) : (
-                  <div className="prose prose-slate max-w-none">
-                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 font-medium text-slate-700 leading-relaxed">
-                      {formatAiText(aiRoadmap)}
-                    </div>
+                  <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 font-medium text-slate-700 leading-relaxed">
+                    {formatAiText(aiRoadmap)}
                   </div>
                 )}
               </div>
-              {!aiLoading && (
-                <button onClick={() => setIsAiModalOpen(false)} className="mt-6 w-full py-4 bg-black text-white font-black rounded-2xl uppercase italic hover:bg-blue-600 transition-all">Got it!</button>
-              )}
+              {!aiLoading && <button onClick={() => setIsAiModalOpen(false)} className="mt-6 w-full py-4 bg-black text-white font-black rounded-2xl uppercase italic hover:bg-blue-600 transition-all">Got it!</button>}
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* Trade History Section */}
       <section className="bg-slate-900 py-20 text-white">
         <div className="max-w-4xl mx-auto px-6">
           <h2 className="text-3xl font-black text-center mb-12 italic uppercase">Activity Hub</h2>
           <div className="bg-slate-800 p-8 rounded-[2.5rem] border border-white/5">
-            {/* Added onUpdate prop here to trigger global data refresh */}
-            <TradeHistory 
-              refreshTrigger={refreshHistory} 
-              onUpdate={() => setRefreshHistory(prev => prev + 1)} 
-            />
+            <TradeHistory refreshTrigger={refreshHistory} onUpdate={() => setRefreshHistory(prev => prev + 1)} />
           </div>
         </div>
       </section>
 
-      {/* Swap Skill Selection Modal */}
-      <AnimatePresence>
-        {isSkillModalOpen && (
-          <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[110] flex items-center justify-center p-4">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white p-8 rounded-3xl max-w-sm w-full text-center">
-              <h2 className="text-xl font-black mb-2 uppercase italic">Choose your skill</h2>
-              <div className="space-y-3">
-                {skills.filter(s => s.user === user.name).map(mySkill => (
-                  <button 
-                    key={mySkill._id}
-                    onClick={() => handleSwapRequest(pendingTargetSkill, mySkill.title)}
-                    className="w-full py-4 bg-slate-100 hover:bg-blue-600 hover:text-white rounded-2xl font-black text-xs uppercase italic"
-                  >
-                    {mySkill.title}
-                  </button>
-                ))}
-                <button onClick={() => setIsSkillModalOpen(false)} className="w-full py-2 text-slate-400 font-bold text-[10px] uppercase">Cancel</button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Publish Course Modal */}
+      {/* Publish Modal */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
             <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white p-8 rounded-3xl max-w-lg w-full relative">
               <button onClick={() => setIsModalOpen(false)} className="absolute right-6 top-6 text-slate-400 hover:text-black"><X size={24}/></button>
               <h2 className="text-2xl font-black mb-6 uppercase italic">Publish Course</h2>
-              <form onSubmit={handleSubmit} className="space-y-4 max-h-[75vh] overflow-y-auto pr-2">
-                <input 
-                  id="skill-title"
-                  name="title"
-                  placeholder="TITLE" 
-                  required 
-                  className="w-full p-4 bg-slate-100 rounded-xl font-bold text-sm" 
-                  value={formData.title} 
-                  onChange={(e) => setFormData({...formData, title: e.target.value})} 
-                />
+              <form onSubmit={handleSubmit} className="space-y-4 max-h-[75vh] overflow-y-auto pr-2 custom-scrollbar">
+                <input placeholder="TITLE" required className="w-full p-4 bg-slate-100 rounded-xl font-bold text-sm" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} />
                 
                 <div className="relative">
                   <ImageIcon size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input 
-                    id="skill-photo"
-                    name="photo"
-                    placeholder="IMAGE URL (Paste Unsplash or direct link)" 
-                    className="w-full p-4 pl-12 bg-slate-100 rounded-xl font-bold text-sm border-2 border-blue-100 focus:border-blue-500 outline-none transition-all" 
-                    value={formData.photo} 
-                    onChange={(e) => setFormData({...formData, photo: e.target.value})} 
-                  />
+                  <input placeholder="IMAGE URL (Unsplash link preferred)" className="w-full p-4 pl-12 bg-slate-100 rounded-xl font-bold text-sm border-2 border-blue-50 focus:border-blue-500 transition-all" value={formData.photo} onChange={(e) => setFormData({...formData, photo: e.target.value})} />
                 </div>
 
-                <select 
-                  id="skill-category"
-                  name="category"
-                  className="w-full p-4 bg-slate-100 rounded-xl font-bold text-sm" 
-                  value={formData.category} 
-                  onChange={(e) => setFormData({...formData, category: e.target.value})}
-                >
+                <select className="w-full p-4 bg-slate-100 rounded-xl font-bold text-sm" value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})}>
                   {categories.filter(c => c !== "All").map(cat => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
-                <textarea 
-                  id="skill-desc"
-                  name="description"
-                  placeholder="DESCRIPTION" 
-                  className="w-full p-4 bg-slate-100 rounded-xl text-sm" 
-                  rows="2" 
-                  value={formData.description} 
-                  onChange={(e) => setFormData({...formData, description: e.target.value})} 
-                />
-                <input 
-                  id="skill-duration"
-                  name="duration"
-                  placeholder="DURATION" 
-                  className="w-full p-4 bg-slate-100 rounded-xl font-bold text-sm" 
-                  value={formData.duration} 
-                  onChange={(e) => setFormData({...formData, duration: e.target.value})} 
-                />
-                <textarea 
-                  id="skill-syllabus"
-                  name="syllabusText"
-                  placeholder="SYLLABUS (Detailed Modules)" 
-                  className="w-full p-4 bg-slate-100 rounded-xl text-sm border-2 border-dashed border-slate-200" 
-                  rows="4" 
-                  value={formData.syllabusText} 
-                  onChange={(e) => setFormData({...formData, syllabusText: e.target.value})} 
-                />
-                <label className="flex items-center gap-3 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl cursor-pointer">
-                  <Upload size={20} className="text-blue-600" />
-                  <span className="text-xs font-black uppercase text-blue-700">{syllabusFile ? syllabusFile.name : "Upload Syllabus PDF"}</span>
-                  <input type="file" accept=".pdf" className="hidden" onChange={(e) => setSyllabusFile(e.target.files[0])} />
-                </label>
-                <button type="submit" className="w-full py-4 bg-blue-600 text-white font-black rounded-xl uppercase italic">Launch</button>
+
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[10px] font-black uppercase text-slate-400">Description</span>
+                  <button type="button" onClick={handleEnhanceDescription} disabled={aiLoading} className="text-[9px] bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded-lg font-black uppercase italic transition-all flex items-center gap-1">
+                    {aiLoading ? "Wait..." : "✨ Magic Edit"}
+                  </button>
+                </div>
+                <textarea placeholder="ROUGH DESCRIPTION (Notes are fine!)" className="w-full p-4 bg-slate-100 rounded-xl text-sm min-h-[80px]" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} />
+
+                <input placeholder="DURATION (e.g., 4 Weeks)" className="w-full p-4 bg-slate-100 rounded-xl font-bold text-sm" value={formData.duration} onChange={(e) => setFormData({...formData, duration: e.target.value})} />
+                
+                <textarea placeholder="SYLLABUS (List your modules here...)" className="w-full p-4 bg-slate-100 rounded-xl text-sm border-2 border-dashed border-slate-200" rows="4" value={formData.syllabusText} onChange={(e) => setFormData({...formData, syllabusText: e.target.value})} />
+
+                <div className="space-y-2">
+                    <div className="flex gap-2">
+                        <label 
+                            className={`flex-1 flex items-center justify-between p-4 rounded-xl cursor-pointer transition-all border-2 ${pdfPreview ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'}`}
+                            onClick={() => pdfPreview && window.open(pdfPreview, '_blank')}
+                        >
+                            <div className="flex items-center gap-3 overflow-hidden">
+                                <Upload size={20} className={pdfPreview ? 'text-white' : 'text-blue-600'} />
+                                <span className="text-xs font-black uppercase truncate">
+                                    {syllabusFile ? syllabusFile.name : "Upload Syllabus PDF"}
+                                </span>
+                            </div>
+                            {pdfPreview && <ExternalLink size={14} className="flex-shrink-0" />}
+                            <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} onClick={(e) => e.stopPropagation()} />
+                        </label>
+
+                        {/* Trash Button to deselect PDF */}
+                        {pdfPreview && (
+                            <button 
+                                type="button"
+                                onClick={handleRemovePdf}
+                                className="px-4 bg-red-100 text-red-600 border-2 border-red-200 rounded-xl hover:bg-red-600 hover:text-white transition-all flex items-center justify-center"
+                                title="Remove PDF"
+                            >
+                                <Trash2 size={20} />
+                            </button>
+                        )}
+                    </div>
+                    {pdfPreview && (
+                        <p className="text-[9px] text-blue-500 font-bold uppercase text-center italic">Click the blue box to preview or trash icon to remove.</p>
+                    )}
+                </div>
+
+                <button type="submit" className="w-full py-4 bg-blue-600 text-white font-black rounded-xl uppercase italic hover:bg-blue-700 shadow-lg shadow-blue-200">Launch</button>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isSkillModalOpen && (
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[110] flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white p-8 rounded-3xl max-sm w-full text-center">
+              <h2 className="text-xl font-black mb-4 uppercase italic">Offer which skill?</h2>
+              <div className="space-y-3">
+                {skills.filter(s => s.user === user.name).map(mySkill => (
+                  <button key={mySkill._id} onClick={() => handleSwapRequest(pendingTargetSkill, mySkill.title)} className="w-full py-4 bg-slate-100 hover:bg-blue-600 hover:text-white rounded-2xl font-black text-xs uppercase italic transition-all">{mySkill.title}</button>
+                ))}
+                <button onClick={() => setIsSkillModalOpen(false)} className="w-full py-2 text-slate-400 font-bold text-[10px] uppercase">Cancel</button>
+              </div>
             </motion.div>
           </div>
         )}

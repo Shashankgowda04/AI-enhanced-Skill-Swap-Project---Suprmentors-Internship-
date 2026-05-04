@@ -1,8 +1,8 @@
 import Skill from '../models/skillModel.js';
 
 export const createSkill = async (req, res) => {
-    // Added 'photo' to the destructuring
-    const { user, title, description, category, syllabusText, duration, photo } = req.body;
+    // Destructure fields from req.body (sent via FormData from the frontend)
+    const { user, title, description, category, syllabusText, duration, photo, type } = req.body;
 
     if (!user || !title || !category) {
         return res.status(400).json({ message: 'Please fill all required fields' });
@@ -47,9 +47,11 @@ export const createSkill = async (req, res) => {
             category,
             syllabusText: syllabusText || "", 
             duration: duration || "",
-            syllabusFile: req.file ? req.file.path : null,
-            type: req.body.type || 'Offer',
-            photo: finalPhoto // Saved to DB (Manual or Auto)
+            // We store ONLY the filename. Your index.js static middleware 
+            // will handle the 'uploads/' path prefix automatically.
+            syllabusFile: req.file ? req.file.filename : null, 
+            type: type || 'Offer',
+            photo: finalPhoto 
         });
         
         res.status(201).json(skill);
@@ -58,7 +60,9 @@ export const createSkill = async (req, res) => {
     }
 };
 
-// Keep getSkills, getUserSkills, deleteSkill, and searchSkills exactly as they were
+// 🟢 Remaining functions (getSkills, getUserSkills, deleteSkill, searchSkills) 
+// remain exactly as you provided them to ensure zero impact on existing features.
+
 export const getSkills = async (req, res) => {
     try {
         const skills = await Skill.find().sort({ createdAt: -1 });
