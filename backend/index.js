@@ -40,8 +40,8 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Database Connection
-const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/skillswap";
+// Database Connection - SECURITY UPDATE: Removed hardcoded fallback string
+const MONGO_URI = process.env.MONGO_URI;
 
 mongoose.connect(MONGO_URI)
   .then(() => console.log("🚀 SERVER IS ALIVE: MongoDB Connected"))

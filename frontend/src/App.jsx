@@ -47,12 +47,12 @@ function App() {
 
   const getCategoryStyles = (category) => {
     const styles = {
-      Programming: "bg-blue-100 border-blue-400 text-blue-900 shadow-blue-100",
-      Marketing: "bg-purple-100 border-purple-400 text-purple-900 shadow-purple-100",
-      Design: "bg-pink-100 border-pink-400 text-pink-900 shadow-pink-100",
-      Finance: "bg-emerald-100 border-emerald-400 text-emerald-900 shadow-emerald-100",
-      Business: "bg-amber-100 border-amber-400 text-amber-900 shadow-amber-100",
-      Other: "bg-slate-200 border-slate-400 text-slate-900 shadow-slate-300/50"
+      Programming: "bg-gradient-to-br from-blue-600 to-indigo-800 border-blue-400 text-white shadow-lg shadow-blue-200/50",
+      Marketing: "bg-gradient-to-br from-purple-600 to-fuchsia-800 border-purple-400 text-white shadow-lg shadow-purple-200/50",
+      Design: "bg-gradient-to-br from-pink-500 to-rose-700 border-pink-400 text-white shadow-lg shadow-pink-200/50",
+      Finance: "bg-gradient-to-br from-emerald-500 to-teal-800 border-emerald-400 text-white shadow-lg shadow-emerald-200/50",
+      Business: "bg-gradient-to-br from-amber-500 to-orange-700 border-amber-400 text-white shadow-lg shadow-amber-200/50",
+      Other: "bg-gradient-to-br from-slate-600 to-slate-800 border-slate-400 text-white shadow-lg shadow-slate-200/50"
     };
     return styles[category] || styles.Other;
   };
@@ -193,11 +193,10 @@ function App() {
     }
   };
 
-  // NEW: Function to remove the selected PDF
   const handleRemovePdf = (e) => {
-    e.stopPropagation(); // Prevent the label's click event (opening preview)
+    e.stopPropagation(); 
     if (pdfPreview) {
-      URL.revokeObjectURL(pdfPreview); // Free memory
+      URL.revokeObjectURL(pdfPreview); 
     }
     setSyllabusFile(null);
     setPdfPreview(null);
@@ -252,7 +251,8 @@ function App() {
   );
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 font-sans">
+    // THE CHANGE: Switched bg-white to bg-[#FFF8F0] for the entire app body
+    <div className="min-h-screen bg-[#FFF8F0] text-slate-900 font-sans">
       <nav className="bg-[#020617] text-white sticky top-0 z-50 h-20 border-b border-white/5 flex items-center px-6">
         <div className="max-w-7xl mx-auto w-full flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -285,23 +285,24 @@ function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-12">
+      {/* Main content wrapper now also uses the Cream background to ensure no white patches */}
+      <main className="max-w-7xl mx-auto px-6 py-12 bg-[#FFF8F0]">
         {unlockedCourses.length > 0 && (
           <section className="mb-16">
             <h2 className="text-2xl font-black mb-6 flex items-center gap-3 italic uppercase"><BookOpen className="text-blue-600"/> My Learning Library</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {unlockedCourses.map(course => (
-                <div key={course._id} className="bg-blue-50 border-2 border-blue-200 p-6 rounded-3xl flex flex-col justify-between">
+                <div key={course._id} className="bg-white border border-slate-200 p-6 rounded-3xl flex flex-col justify-between shadow-sm">
                   <div className="flex gap-4 mb-4">
-                    <img src={getCourseImage(course)} className="w-24 h-24 rounded-2xl object-cover border-2 border-white shadow-md" alt={course.title} />
+                    <img src={getCourseImage(course)} className="w-24 h-24 rounded-2xl object-cover border border-slate-100 shadow-md" alt={course.title} />
                     <div>
-                      <h3 className="font-black text-lg uppercase italic mb-1">{course.title}</h3>
+                      <h3 className="font-black text-lg uppercase italic mb-1"> {course.title}</h3>
                       <p className="text-slate-600 text-sm line-clamp-2">{course.description}</p>
                     </div>
                   </div>
                   <div className="flex gap-2">
                     <button 
-                        className="flex-1 py-3 bg-black text-white rounded-xl font-black text-xs uppercase italic flex items-center justify-center gap-2"
+                        className="flex-1 py-3 bg-black text-white rounded-xl font-black text-xs uppercase italic flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors"
                         onClick={() => {
                             if (course.syllabusFile) {
                                 window.open(`http://localhost:5000/uploads/${course.syllabusFile}`, '_blank');
@@ -324,27 +325,27 @@ function App() {
           <h2 className="text-2xl font-black mb-6 italic uppercase">Explore Skills</h2>
           <div className="flex gap-3 mb-8 overflow-x-auto no-scrollbar py-2">
             {categories.map(cat => (
-              <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-6 py-2 rounded-full font-black text-[10px] uppercase tracking-widest transition-all ${activeCategory === cat ? "bg-black text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{cat}</button>
+              <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-6 py-2 rounded-full font-black text-[10px] uppercase tracking-widest transition-all ${activeCategory === cat ? "bg-black text-white" : "bg-white border border-slate-200 text-slate-500 hover:bg-slate-200"}`}>{cat}</button>
             ))}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {filteredSkills.map((skill) => {
               const { rating } = getDynamicRating(skill._id);
               return (
-                <motion.div layout key={skill._id} className={`${getCategoryStyles(skill.category)} rounded-3xl overflow-hidden border shadow-sm flex flex-col h-full`}>
+                <motion.div layout key={skill._id} className={`${getCategoryStyles(skill.category)} rounded-3xl overflow-hidden border shadow-sm flex flex-col h-full transition-transform hover:-translate-y-2`}>
                   <div className="h-44 relative overflow-hidden">
-                    <img src={getCourseImage(skill)} className="w-full h-full object-cover transition-transform hover:scale-110" alt={skill.title} />
+                    <img src={getCourseImage(skill)} className="w-full h-full object-cover transition-transform duration-500 hover:scale-110" alt={skill.title} />
                     {skill.user === user.name && (
-                      <button onClick={() => handleDelete(skill._id)} className="absolute top-3 right-3 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600"><Trash2 size={14} /></button>
+                      <button onClick={() => handleDelete(skill._id)} className="absolute top-3 right-3 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 shadow-lg"><Trash2 size={14} /></button>
                     )}
                   </div>
                   <div className="p-5 flex flex-col flex-grow">
-                    <h3 className="font-black text-md mb-1 uppercase italic truncate">{skill.title}</h3>
-                    <p className="text-[10px] font-bold text-slate-500 mb-4 uppercase">By {skill.user}</p>
-                    <div className="mt-auto flex justify-between items-center pt-3 border-t border-black/5">
-                      <div className="flex items-center gap-1 font-black text-xs">{rating} <Star size={12} className="text-amber-500" fill="currentColor"/></div>
+                    <h3 className="font-black text-md mb-1 uppercase italic truncate text-white">{skill.title}</h3>
+                    <p className="text-[10px] font-bold text-white/80 mb-4 uppercase">By {skill.user}</p>
+                    <div className="mt-auto flex justify-between items-center pt-3 border-t border-white/20">
+                      <div className="flex items-center gap-1 font-black text-xs text-white">{rating} <Star size={12} className="text-yellow-400" fill="currentColor"/></div>
                       {skill.user !== user.name && (
-                        <button onClick={() => handleSwapRequest(skill)} className="px-4 py-2 bg-black text-white rounded-xl font-black text-[10px] uppercase italic hover:bg-blue-600 transition-all">Swap</button>
+                        <button onClick={() => handleSwapRequest(skill)} className="px-4 py-2 bg-white text-black rounded-xl font-black text-[10px] uppercase italic hover:bg-blue-400 hover:text-white transition-all shadow-md">Swap</button>
                       )}
                     </div>
                   </div>
@@ -355,7 +356,6 @@ function App() {
         </section>
       </main>
 
-      {/* AI Roadmap Modal */}
       <AnimatePresence>
         {isAiModalOpen && (
           <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
@@ -385,16 +385,16 @@ function App() {
         )}
       </AnimatePresence>
 
-      <section className="bg-slate-900 py-20 text-white">
+      <section className="bg-[#020617] py-20 text-white">
         <div className="max-w-4xl mx-auto px-6">
           <h2 className="text-3xl font-black text-center mb-12 italic uppercase">Activity Hub</h2>
-          <div className="bg-slate-800 p-8 rounded-[2.5rem] border border-white/5">
+          <div className="bg-slate-900/50 p-8 rounded-[2.5rem] border border-white/5">
             <TradeHistory refreshTrigger={refreshHistory} onUpdate={() => setRefreshHistory(prev => prev + 1)} />
           </div>
         </div>
       </section>
 
-      {/* Publish Modal */}
+      {/* Modals remain with white background for readability on top of the cream background */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
@@ -406,7 +406,7 @@ function App() {
                 
                 <div className="relative">
                   <ImageIcon size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input placeholder="IMAGE URL (Unsplash link preferred)" className="w-full p-4 pl-12 bg-slate-100 rounded-xl font-bold text-sm border-2 border-blue-50 focus:border-blue-500 transition-all" value={formData.photo} onChange={(e) => setFormData({...formData, photo: e.target.value})} />
+                  <input placeholder="IMAGE URL" className="w-full p-4 pl-12 bg-slate-100 rounded-xl font-bold text-sm border-2 border-blue-50 focus:border-blue-500 transition-all" value={formData.photo} onChange={(e) => setFormData({...formData, photo: e.target.value})} />
                 </div>
 
                 <select className="w-full p-4 bg-slate-100 rounded-xl font-bold text-sm" value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})}>
@@ -419,11 +419,11 @@ function App() {
                     {aiLoading ? "Wait..." : "✨ Magic Edit"}
                   </button>
                 </div>
-                <textarea placeholder="ROUGH DESCRIPTION (Notes are fine!)" className="w-full p-4 bg-slate-100 rounded-xl text-sm min-h-[80px]" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} />
+                <textarea placeholder="ROUGH DESCRIPTION" className="w-full p-4 bg-slate-100 rounded-xl text-sm min-h-[80px]" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} />
 
                 <input placeholder="DURATION (e.g., 4 Weeks)" className="w-full p-4 bg-slate-100 rounded-xl font-bold text-sm" value={formData.duration} onChange={(e) => setFormData({...formData, duration: e.target.value})} />
                 
-                <textarea placeholder="SYLLABUS (List your modules here...)" className="w-full p-4 bg-slate-100 rounded-xl text-sm border-2 border-dashed border-slate-200" rows="4" value={formData.syllabusText} onChange={(e) => setFormData({...formData, syllabusText: e.target.value})} />
+                <textarea placeholder="SYLLABUS" className="w-full p-4 bg-slate-100 rounded-xl text-sm border-2 border-dashed border-slate-200" rows="4" value={formData.syllabusText} onChange={(e) => setFormData({...formData, syllabusText: e.target.value})} />
 
                 <div className="space-y-2">
                     <div className="flex gap-2">
@@ -441,7 +441,6 @@ function App() {
                             <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} onClick={(e) => e.stopPropagation()} />
                         </label>
 
-                        {/* Trash Button to deselect PDF */}
                         {pdfPreview && (
                             <button 
                                 type="button"
@@ -453,9 +452,6 @@ function App() {
                             </button>
                         )}
                     </div>
-                    {pdfPreview && (
-                        <p className="text-[9px] text-blue-500 font-bold uppercase text-center italic">Click the blue box to preview or trash icon to remove.</p>
-                    )}
                 </div>
 
                 <button type="submit" className="w-full py-4 bg-blue-600 text-white font-black rounded-xl uppercase italic hover:bg-blue-700 shadow-lg shadow-blue-200">Launch</button>
